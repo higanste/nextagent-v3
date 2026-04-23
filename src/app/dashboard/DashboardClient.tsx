@@ -87,8 +87,13 @@ export default function DashboardClient({ user, isPro }: { user: any, isPro: boo
     try {
       const res = await fetch("/api/checkout", { method: "POST", body: JSON.stringify({ priceId: "price_dummy" }) });
       const data = await res.json();
+      if (!res.ok) {
+        alert("Billing error: " + (data.error || "Failed to initiate checkout"));
+        return;
+      }
       if (data.url) window.location.href = data.url;
-    } catch (e) {
+    } catch (e: any) {
+      alert("Checkout failed: " + e.message);
       console.error(e);
     }
   };
