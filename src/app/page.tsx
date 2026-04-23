@@ -23,10 +23,10 @@ export default function Home() {
             <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/api/auth/signin" className="px-4 py-2 text-sm font-medium hover:text-white transition-colors">
+            <Link href="/api/auth/signin?callbackUrl=/dashboard" className="px-4 py-2 text-sm font-medium hover:text-white transition-colors">
               Sign In
             </Link>
-            <Link href="/api/auth/signin" className="px-4 py-2 bg-white text-black text-sm font-bold rounded-full hover:bg-zinc-200 transition-all">
+            <Link href="/api/auth/signin?callbackUrl=/dashboard" className="px-4 py-2 bg-white text-black text-sm font-bold rounded-full hover:bg-zinc-200 transition-all">
               Get Started
             </Link>
           </div>
@@ -71,7 +71,7 @@ export default function Home() {
               transition={{ duration: 0.5, delay: 0.3 }}
               className="flex flex-col md:flex-row items-center justify-center gap-4"
             >
-              <Link href="/api/auth/signin" className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all flex items-center justify-center gap-2 group">
+              <Link href="/api/auth/signin?callbackUrl=/dashboard" className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all flex items-center justify-center gap-2 group">
                 Start Deploying <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link href="https://github.com/higanste/nextagent-website" className="w-full md:w-auto px-8 py-4 bg-zinc-900 border border-white/10 text-white font-bold rounded-xl hover:bg-zinc-800 transition-all flex items-center justify-center gap-2">

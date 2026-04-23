@@ -12,19 +12,25 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.53",
+    "@ai-sdk/react": "^3.0.170",
     "@auth/drizzle-adapter": "^1.11.2",
     "@neondatabase/serverless": "^0.10.4",
+    "ai": "^6.0.168",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "framer-motion": "^12.38.0",
     "groq-sdk": "^1.1.2",
     "lucide-react": "^1.8.0",
+    "mammoth": "^1.12.0",
     "next": "^15.3.1",
     "next-auth": "^5.0.0-beta.31",
+    "pdf-parse": "^2.4.5",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "stripe": "^22.0.2",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20",
