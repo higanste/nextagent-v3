@@ -24,7 +24,7 @@ export default function DashboardClient({ user, isPro }: { user: any, isPro: boo
 
   const handleCustomSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() && !file) return;
+    if (!input?.trim() && !file) return;
 
     if (!file) {
       // Default useChat behavior
@@ -210,7 +210,7 @@ export default function DashboardClient({ user, isPro }: { user: any, isPro: boo
             />
             <button 
               type="submit" 
-              disabled={isLoading || (!input.trim() && !file)}
+              disabled={isLoading || (!input?.trim() && !file)}
               className="p-3 m-1 mr-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] disabled:shadow-none"
             >
               <ArrowUp className="w-5 h-5" />
