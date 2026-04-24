@@ -1,19 +1,22 @@
 import {
+  timestamp,
   pgTable,
   text,
-  timestamp,
-  integer,
   primaryKey,
-} from "drizzle-orm/pg-core";
-import type { AdapterAccount } from "next-auth/adapters";
+  integer,
+  varchar,
+} from "drizzle-orm/pg-core"
+import type { AdapterAccount } from "next-auth/adapters"
 
 export const users = pgTable("user", {
-  id: text("id").notNull().primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   name: text("name"),
   email: text("email").notNull(),
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
-});
+})
 
 export const accounts = pgTable(
   "account",
@@ -37,15 +40,15 @@ export const accounts = pgTable(
       columns: [account.provider, account.providerAccountId],
     }),
   })
-);
+)
 
 export const sessions = pgTable("session", {
-  sessionToken: text("sessionToken").notNull().primaryKey(),
+  sessionToken: text("sessionToken").primaryKey(),
   userId: text("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expires: timestamp("expires", { mode: "date" }).notNull(),
-});
+})
 
 export const verificationTokens = pgTable(
   "verificationToken",
@@ -57,17 +60,11 @@ export const verificationTokens = pgTable(
   (vt) => ({
     compoundKey: primaryKey({ columns: [vt.identifier, vt.token] }),
   })
-);
+)
 
-export const documents = pgTable("document", {
-  id: text("id").notNull().primaryKey(),
-  userId: text("userId")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  content: text("content"),
-  url: text("url"),
-  status: text("status").notNull().default("pending"), // pending, processing, completed, error
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
+export const drops = pgTable("drops", {
+  code: varchar("code", { length: 4 }).primaryKey(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
 });

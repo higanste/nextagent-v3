@@ -1,132 +1,222 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Bot, Sparkles, Shield, Zap, ArrowRight, Globe } from "lucide-react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Copy, Download, Loader2, ArrowRight } from "lucide-react";
+import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function Home() {
+  const [dropText, setDropText] = useState("");
+  const [pin, setPin] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedPin, setGeneratedPin] = useState<string | null>(null);
+
+  const [receivePin, setReceivePin] = useState("");
+  const [receivedText, setReceivedText] = useState<string | null>(null);
+  const [isReceiving, setIsReceiving] = useState(false);
+  const [receiveError, setReceiveError] = useState("");
+
+  // Auto-listen when receivePin is 4 digits
+  useEffect(() => {
+    if (receivePin.length === 4) {
+      setIsReceiving(true);
+      setReceiveError("");
+      const docRef = doc(db, "drops", receivePin.toUpperCase());
+      
+      const unsubscribe = onSnapshot(docRef, (docSnap) => {
+        setIsReceiving(false);
+        if (docSnap.exists()) {
+          setReceivedText(docSnap.data().content);
+        } else {
+          setReceivedText(null);
+          setReceiveError("No drop found for this PIN.");
+        }
+      }, (error) => {
+        setIsReceiving(false);
+        console.error("Error listening to document:", error);
+        setReceiveError("Connection error. Check Firebase config.");
+      });
+
+      return () => unsubscribe();
+    } else {
+      setReceivedText(null);
+      setReceiveError("");
+    }
+  }, [receivePin]);
+
+  const handleGenerate = async () => {
+    if (!dropText.trim()) return;
+    setIsGenerating(true);
+    
+    // Generate a random 4-char alphanumeric code
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "";
+    for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+    
+    try {
+      await setDoc(doc(db, "drops", code), {
+        content: dropText,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24h TTL
+      });
+      setGeneratedPin(code);
+      setDropText("");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate drop. Ensure Firebase is configured correctly.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
   return (
-    <div className="relative min-h-screen bg-black text-white selection:bg-blue-500/30">
-      {/* Background Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-6xl h-[500px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
+    <div className="min-h-screen bg-[#0f0f0f] text-[#e0e0e0] font-sans selection:bg-[#ff003c] selection:text-white">
+      {/* Brutalist Grid Background */}
+      <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" 
+           style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-black/50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="NextAgent Logo" className="w-10 h-10 object-contain drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
-            <span className="text-xl font-bold tracking-tight">NextAgent</span>
+      <main className="relative z-10 max-w-5xl mx-auto px-6 py-20 flex flex-col items-center">
+        
+        {/* Header - Hack Club / Brutalist Style */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full flex flex-col items-center mb-16"
+        >
+          <div className="flex items-center gap-4 mb-4">
+            <img src="/logo.png" alt="NextAgent Logo" className="w-16 h-16 drop-shadow-[4px_4px_0px_#ff003c]" />
+            <h1 className="text-6xl md:text-8xl font-black tracking-tighter uppercase" style={{ textShadow: '4px 4px 0px #ff003c' }}>
+              DROP
+            </h1>
           </div>
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-400">
-            <Link href="#features" className="hover:text-white transition-colors">Features</Link>
-            <Link href="#pricing" className="hover:text-white transition-colors">Pricing</Link>
-            <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/api/auth/signin?callbackUrl=/dashboard" className="px-4 py-2 text-sm font-medium hover:text-white transition-colors">
-              Sign In
-            </Link>
-            <Link href="/api/auth/signin?callbackUrl=/dashboard" className="px-4 py-2 bg-white text-black text-sm font-bold rounded-full hover:bg-zinc-200 transition-all">
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </nav>
+          <p className="text-xl md:text-2xl font-mono text-zinc-400 bg-black px-4 py-2 border-2 border-zinc-700 shadow-[4px_4px_0px_#3f3f46]">
+            Frictionless real-time clipboard.
+          </p>
+        </motion.div>
 
-      <main>
-        {/* Hero Section */}
-        <section className="pt-32 pb-20 px-6">
-          <div className="max-w-7xl mx-auto text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold mb-8"
-            >
-              <Sparkles className="w-3 h-3" />
-              <span>NextAgent v3 is now live</span>
-            </motion.div>
+        <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-12">
+          
+          {/* DROP SECTION */}
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex flex-col gap-6"
+          >
+            <div className="bg-black border-4 border-white p-6 shadow-[8px_8px_0px_#fff] hover:shadow-[12px_12px_0px_#ff003c] transition-all duration-300">
+              <h2 className="text-3xl font-black uppercase mb-4 tracking-tight">1. Drop Text</h2>
+              
+              <textarea 
+                value={dropText}
+                onChange={(e) => setDropText(e.target.value)}
+                placeholder="Paste your text, code snippet, or AI prompt here..."
+                className="w-full h-48 bg-zinc-900 border-2 border-zinc-700 p-4 font-mono text-sm focus:outline-none focus:border-[#ff003c] resize-none mb-4"
+              />
 
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-5xl md:text-7xl font-bold tracking-tight mb-8 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent"
-            >
-              The Intelligent Edge for <br className="hidden md:block" /> AI Agent Deployment
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed"
-            >
-              Deploy, scale, and manage autonomous AI agents with the performance of Cloudflare Edge and the intelligence of Llama 3 & Claude 3.5.
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="flex flex-col md:flex-row items-center justify-center gap-4"
-            >
-              <Link href="/api/auth/signin?callbackUrl=/dashboard" className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all flex items-center justify-center gap-2 group">
-                Start Deploying <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <Link href="https://github.com/higanste/nextagent-website" className="w-full md:w-auto px-8 py-4 bg-zinc-900 border border-white/10 text-white font-bold rounded-xl hover:bg-zinc-800 transition-all flex items-center justify-center gap-2">
-                <Globe className="w-5 h-5" /> View Source
-              </Link>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Features Grid */}
-        <section id="features" className="py-20 px-6 border-t border-white/5">
-          <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {[
-                {
-                  title: "Edge Performance",
-                  desc: "Running on Cloudflare Workers for sub-50ms latency globally.",
-                  icon: Zap,
-                  color: "text-yellow-400"
-                },
-                {
-                  title: "Multi-Model AI",
-                  desc: "Switch between Llama 3, Claude 3.5, and GPT-4o with a single API.",
-                  icon: Bot,
-                  color: "text-blue-400"
-                },
-                {
-                  title: "D1 Database",
-                  desc: "Fully serverless SQL storage at the edge with zero cold starts.",
-                  icon: Shield,
-                  color: "text-green-400"
-                }
-              ].map((f, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="p-8 rounded-2xl bg-zinc-900/50 border border-white/5 hover:border-white/10 transition-colors group"
-                >
-                  <f.icon className={`w-10 h-10 ${f.color} mb-6 group-hover:scale-110 transition-transform`} />
-                  <h3 className="text-xl font-bold mb-4">{f.title}</h3>
-                  <p className="text-zinc-400 leading-relaxed">{f.desc}</p>
-                </motion.div>
-              ))}
+              <button 
+                onClick={handleGenerate}
+                disabled={!dropText.trim() || isGenerating}
+                className="w-full py-4 bg-white text-black font-black text-xl uppercase tracking-widest border-2 border-black hover:bg-[#ff003c] hover:text-white transition-colors flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGenerating ? <Loader2 className="animate-spin w-6 h-6" /> : "Generate PIN"}
+              </button>
             </div>
-          </div>
-        </section>
-      </main>
 
-      {/* Footer */}
-      <footer className="py-10 px-6 border-t border-white/5 text-center text-zinc-500 text-sm">
-        <p>© 2026 NextAgent. Built for the Edge.</p>
-      </footer>
+            <AnimatePresence>
+              {generatedPin && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="bg-[#ff003c] border-4 border-white p-6 shadow-[8px_8px_0px_#fff]"
+                >
+                  <p className="text-white font-bold uppercase text-sm mb-2">Your Drop PIN</p>
+                  <div className="flex items-center justify-between bg-black p-4 border-2 border-white">
+                    <span className="text-5xl font-black font-mono tracking-widest">{generatedPin}</span>
+                    <button onClick={() => copyToClipboard(generatedPin)} className="p-3 bg-white text-black hover:bg-zinc-300 transition-colors">
+                      <Copy className="w-6 h-6" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
+          {/* RECEIVE SECTION */}
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex flex-col gap-6"
+          >
+            <div className="bg-black border-4 border-[#00ffcc] p-6 shadow-[8px_8px_0px_#00ffcc] hover:shadow-[12px_12px_0px_#00ffcc] transition-all duration-300">
+              <h2 className="text-3xl font-black uppercase mb-4 tracking-tight">2. Catch Text</h2>
+              
+              <div className="relative mb-6">
+                <input 
+                  type="text"
+                  maxLength={4}
+                  value={receivePin}
+                  onChange={(e) => setReceivePin(e.target.value.toUpperCase())}
+                  placeholder="ENTER 4-DIGIT PIN"
+                  className="w-full py-6 bg-zinc-900 border-2 border-zinc-700 text-center text-4xl font-black font-mono uppercase tracking-widest placeholder:text-zinc-600 focus:outline-none focus:border-[#00ffcc]"
+                />
+                {isReceiving && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <Loader2 className="animate-spin w-6 h-6 text-[#00ffcc]" />
+                  </div>
+                )}
+              </div>
+
+              <AnimatePresence mode="wait">
+                {receivedText ? (
+                  <motion.div 
+                    key="text"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="relative"
+                  >
+                    <textarea 
+                      readOnly
+                      value={receivedText}
+                      className="w-full h-64 bg-zinc-900 border-2 border-[#00ffcc] p-4 font-mono text-sm focus:outline-none resize-none"
+                    />
+                    <button 
+                      onClick={() => copyToClipboard(receivedText)}
+                      className="absolute bottom-4 right-4 p-3 bg-[#00ffcc] text-black font-bold uppercase text-sm border-2 border-black hover:bg-white transition-colors flex items-center gap-2 shadow-[4px_4px_0px_#000]"
+                    >
+                      <Copy className="w-4 h-4" /> Copy
+                    </button>
+                  </motion.div>
+                ) : receiveError ? (
+                  <motion.div 
+                    key="error"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="p-4 bg-red-500/20 border-2 border-red-500 text-red-500 font-bold font-mono text-center"
+                  >
+                    {receiveError}
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="empty"
+                    className="h-64 flex items-center justify-center border-2 border-dashed border-zinc-700 bg-zinc-900/50"
+                  >
+                    <p className="text-zinc-500 font-mono font-bold uppercase flex items-center gap-2">
+                      <Download className="w-5 h-5" /> Waiting for drop...
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+
+        </div>
+      </main>
     </div>
   );
 }
