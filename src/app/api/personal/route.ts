@@ -1,229 +1,172 @@
-import { createAdminClient } from "./lib/supabase-admin";
-import { headers } from "next/headers";
-import { fetchGitHubDataFn } from "./server-actions";
-import { fetchYouTubeDataFn } from "./server-actions";
-import { fetchStravaDataFn } from "./server-actions";
-import { fetchDoomscrollDataFn } from "./server-actions";
-import { generateInsightsFn } from "./server-actions";
+import { adminDb, adminAuth } from "@/lib/firebase/admin";
+import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/**
- * GET /api/personal/life
- * Aggregated personal data from all connected accounts
- */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const userId = searchParams.get("userId");
+
+  if (!userId) {
+    return NextResponse.json({ error: "User ID required" }, { status: 400 });
+  }
+
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return new Response("User ID required", { status: 400 });
+    const userDoc = await adminDb.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Fetch data from all connected sources using server actions
-    const fetchPromises: Promise<any>[] = [];
+    const accountsSnapshot = await adminDb
+      .collection("users")
+      .doc(userId)
+      .collection("accounts")
+      .orderBy("connectedAt", "desc")
+      .get();
 
-    // Check what providers are connected and fetch accordingly
-    const adminSupabase = createAdminClient();
+    const accounts = accountsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    // Check GitHub
-    const { data: githubAccount } = await adminSupabase
-      .from("user_accounts")
-      .select("provider")
-      .eq("user_id", userId)
-      .eq("provider", "github")
-      .single();
+    const sessionsSnapshot = await adminDb
+      .collection("users")
+      .doc(userId)
+      .collection("doomscrollSessions")
+      .orderBy("timestamp", "desc")
+      .limit(10)
+      .get();
 
-    if (githubAccount) {
-      fetchPromises.push(fetchGitHubDataFn(userId));
-    }
+    const sessions = sessionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    // Check Google/YouTube
-    const { data: googleAccount } = await adminSupabase
-      .from("user_accounts")
-      .select("provider")
-      .eq("user_id", userId)
-      .eq("provider", "google")
-      .single();
-
-    if (googleAccount) {
-      fetchPromises.push(fetchYouTubeDataFn(userId));
-    }
-
-    // Check Strava
-    const { data: stravaAccount } = await adminSupabase
-      .from("user_accounts")
-      .select("provider")
-      .eq("user_id", userId)
-      .eq("provider", "strava")
-      .single();
-
-    if (stravaAccount) {
-      fetchPromises.push(fetchStravaDataFn(userId));
-    }
-
-    // Check screen time (iOS or Android)
-    const { data: screenTimeAccount } = await adminSupabase
-      .from("user_accounts")
-      .select("provider")
-      .eq("user_id", userId)
-      .or("provider=iosScreenTime,provider=androidWellbeing")
-      .single();
-
-    if (screenTimeAccount) {
-      fetchPromises.push(fetchDoomscrollDataFn(userId));
-    }
-
-    // Wait for all data fetches
-    const results = await Promise.allSettled(fetchPromises);
-
-    const aggregatedData = {
+    return NextResponse.json({
       userId,
+      user: userDoc.data(),
+      accounts,
+      sessions,
       fetchedAt: new Date().toISOString(),
-      data: {},
-    };
-
-    // Map results to aggregated data
-    const typeMap: Record<string, string> = {
-      github: "githubData",
-      youtube: "youtubeData",
-      strava: "stravaData",
-      doomscroll: "doomscrollData",
-    };
-
-    results.forEach((result, index) => {
-      if (result.status === "fulfilled") {
-        const resolvedValue = result.value;
-        if (resolvedValue?.success) {
-          // Add to aggregated data based on the type
-          const typeKey = Object.entries(typeMap)[index % Object.keys(typeMap).length];
-          if (typeKey) {
-            aggregatedData.data = {
-              ...aggregatedData.data,
-              [typeKey[0]]: resolvedValue,
-            };
-          }
-        }
-      }
     });
-
-    return new Response(JSON.stringify(aggregatedData), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
-    });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      headers: { "Content-Type": "application/json" },
-      status: 500,
-    });
+  } catch (error) {
+    console.error("Error fetching personal data:", error);
+    return NextResponse.json({ error: "Failed to fetch data" }, { status: 500 });
   }
 }
 
-/**
- * POST /api/personal/...
- * Handles both insights generation and account connection based on body parameters
- */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, dataTypes, context, provider, accessToken, refreshToken, expiresAt, userData } = body;
+    const { userId, dataTypes, context } = body;
 
-    // If provider is provided, handle account connection
-    if (provider) {
-      return await handleConnectAccount(body);
-    }
-
-    // Otherwise, handle insights generation
     if (!userId || !dataTypes || !Array.isArray(dataTypes)) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: userId, dataTypes, context" }),
-        {
-          headers: { "Content-Type": "application/json" },
-          status: 400,
-        }
+      return NextResponse.json(
+        { error: "Missing required fields: userId, dataTypes, context" },
+        { status: 400 }
       );
     }
 
-    // Generate insights using OpenRouter/LLM via server action
-    const result = await generateInsightsFn({
-      userId,
-      dataTypes,
-      context,
-    });
-
-    if (result.error) {
-      return new Response(JSON.stringify({ error: result.error }), {
-        headers: { "Content-Type": "application/json" },
-        status: 500,
-      });
+    const userDoc = await adminDb.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return new Response(JSON.stringify({ insights: result.insights }), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
-    });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      headers: { "Content-Type": "application/json" },
-      status: 500,
-    });
+    const accountsSnapshot = await adminDb
+      .collection("users")
+      .doc(userId)
+      .collection("accounts")
+      .get();
+
+    const accounts = accountsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    const insights = await generateInsights(userId, dataTypes, accounts, context || "");
+
+    return NextResponse.json({ insights });
+  } catch (error) {
+    console.error("Insights error:", error);
+    return NextResponse.json({ error: "Failed to generate insights" }, { status: 500 });
   }
 }
 
-async function handleConnectAccount(body: any) {
-  const { userId, provider, accessToken, refreshToken, expiresAt, userData } = body;
+async function generateInsights(userId: string, dataTypes: string[], accounts: any[], context: string) {
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-  if (!userId || !provider) {
-    return new Response(
-      JSON.stringify({ error: "Missing required fields: userId, provider" }),
-      {
-        headers: { "Content-Type": "application/json" },
-        status: 400,
-      }
-    );
+  if (!OPENROUTER_API_KEY) {
+    throw new Error("OPENROUTER_API_KEY not configured");
   }
 
-  // Store connected account tokens using admin Supabase client
-  const adminSupabase = createAdminClient();
+  const accountSummary = accounts
+    .map(a => `${a.provider}: ${JSON.stringify(a.data || {})}`)
+    .join("\n");
 
-  // Check if account already exists
-  const { data: existing } = await adminSupabase
-    .from("user_accounts")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("provider", provider)
-    .single();
+  const prompt = `
+User personal data analysis request:
+Context: ${context || "Generate personal insights and recommendations"}
 
-  if (existing) {
-    // Update existing token
-    await adminSupabase
-      .from("user_accounts")
-      .update({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        expires_at: expiresAt,
-        data: userData,
-        connected_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId)
-      .eq("provider", provider);
-  } else {
-    // Create new account connection
-    await adminSupabase.from("user_accounts").insert({
-      user_id: userId,
-      provider: provider,
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expires_at: expiresAt,
-      data: userData,
-      connected_at: new Date().toISOString(),
-    });
-  }
+Connected accounts:
+${accountSummary}
 
-  return new Response(JSON.stringify({ success: true }), {
-    headers: { "Content-Type": "application/json" },
-    status: 200,
+Please provide:
+1. Key patterns and anomalies
+2. Personalized recommendations for productivity/sleep/etc.
+3. Creative insights based on the data
+4. Brutally honest assessment of time usage (doomscroll analysis)
+
+Format as a structured report with headings and bullet points.
+  `.trim();
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": process.env.NEXT_PUBLIC_URL || "http://localhost:3000",
+      "X-Title": "NextAgent",
+    },
+    body: JSON.stringify({
+      model: "anthropic/claude-3.5-sonnet",
+      temperature: 0.7,
+      messages: [
+        {
+          role: "system",
+          content: "You are a personal data analyst AI. Help users understand their digital habits and provide actionable insights. Be insightful, honest, and creative."
+        },
+        { role: "user", content: prompt }
+      ],
+    }),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0]?.message?.content || "No insights generated";
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { userId, provider, accessToken, refreshToken, expiresAt, userData } = body;
+
+    if (!userId || !provider) {
+      return NextResponse.json({ error: "Missing required fields: userId, provider" }, { status: 400 });
+    }
+
+    await adminDb
+      .collection("users")
+      .doc(userId)
+      .collection("accounts")
+      .doc(provider)
+      .set({
+        provider,
+        accessToken,
+        refreshToken,
+        expiresAt,
+        data: userData,
+        connectedAt: new Date().toISOString(),
+      }, { merge: true });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Connect account error:", error);
+    return NextResponse.json({ error: "Failed to connect account" }, { status: 500 });
+  }
 }
